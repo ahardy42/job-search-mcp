@@ -21,7 +21,6 @@ export interface JobSearchParams {
   salary?: string;
   experienceLevel?: string;
   sortBy?: string;
-  limit?: number;
   page?: number;
 }
 
@@ -179,7 +178,7 @@ function parseJobList(html: string): JobListing[] {
       date: el.find("time").attr("datetime") ?? "",
       salary: el.find(".job-search-card__salary-info").text().trim().replace(/\s+/g, " ") || "Not specified",
       jobUrl: el.find(".base-card__full-link").attr("href") ?? "",
-      agoTime: el.find(".job-search-card__listdate").text().trim(),
+      agoTime: el.find(".job-search-card__listdate").text().trim()
     });
   });
 
@@ -211,7 +210,7 @@ async function fetchJobBatch(params: JobSearchParams, start: number): Promise<Jo
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-function buildCacheKey(params: JobSearchParams, limit: number): string {
+function buildCacheKey(params: JobSearchParams): string {
   const keys: (keyof JobSearchParams)[] = [
     "dateSincePosted",
     "experienceLevel",
@@ -224,7 +223,6 @@ function buildCacheKey(params: JobSearchParams, limit: number): string {
     "sortBy",
   ];
   const parts = keys.map((k) => `${k}=${params[k] ?? ""}`);
-  parts.push(`limit=${limit}`);
   return parts.join("&");
 }
 
@@ -264,8 +262,7 @@ export async function fetchJobDescription(url: string): Promise<string> {
 }
 
 export async function searchJobs(params: JobSearchParams): Promise<JobListing[]> {
-  const limit = params.limit ?? 25;
-  const cacheKey = buildCacheKey(params, limit);
+  const cacheKey = buildCacheKey(params);
 
   const cached = cache.get(cacheKey);
   if (cached) {
@@ -274,7 +271,7 @@ export async function searchJobs(params: JobSearchParams): Promise<JobListing[]>
   }
   console.error(`[linkedin] Cache miss for key: ${cacheKey}`);
 
-  let allJobs: JobListing[] = [];
+  const allJobs: JobListing[] = [];
   let start = 0;
   let consecutiveErrors = 0;
 
@@ -285,11 +282,6 @@ export async function searchJobs(params: JobSearchParams): Promise<JobListing[]>
 
       allJobs.push(...batch);
       console.error(`[linkedin] Fetched ${batch.length} jobs. Total: ${allJobs.length}`);
-
-      if (allJobs.length >= limit) {
-        allJobs = allJobs.slice(0, limit);
-        break;
-      }
 
       consecutiveErrors = 0;
       start += BATCH_SIZE;

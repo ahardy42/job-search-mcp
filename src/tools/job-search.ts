@@ -1,7 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { searchJobs } from "../services/linkedin.js";
-import { CHARACTER_LIMIT } from "../constants.js";
 
 const JobSearchInputSchema = {
   keywords: z
@@ -38,13 +37,6 @@ const JobSearchInputSchema = {
     .enum(["recent", "relevant"])
     .default("recent")
     .describe("Sort order for results"),
-  limit: z
-    .number()
-    .int()
-    .min(1)
-    .max(100)
-    .default(25)
-    .describe("Maximum number of job listings to return"),
 };
 
 export function registerJobSearchTool(server: McpServer): void {
@@ -67,7 +59,6 @@ Args:
   - experience_level (enum): "internship", "entry level", "associate", "senior", "director", "executive"
   - salary (enum, optional): Minimum salary — "40000", "60000", "80000", "100000", "120000"
   - sort_by (enum): "recent" or "relevant"
-  - limit (number): Max results, 1-100, default 25
 
 Returns:
   JSON array of job listings:
@@ -86,6 +77,7 @@ Returns:
 Notes:
   - LinkedIn may rate-limit aggressive scraping; the tool implements backoff and caching (1hr TTL)
   - Results are cached; identical queries within 1 hour return cached data
+  - Returns all available results from LinkedIn for the given filters
   - If no results are found, returns an empty array with a message`,
       inputSchema: JobSearchInputSchema,
       annotations: {
@@ -106,7 +98,6 @@ Notes:
           experienceLevel: params.experience_level,
           salary: params.salary,
           sortBy: params.sort_by,
-          limit: params.limit,
         });
 
         if (jobs.length === 0) {
@@ -133,19 +124,7 @@ Notes:
           jobs,
         };
 
-        let text = JSON.stringify(output, null, 2);
-
-        if (text.length > CHARACTER_LIMIT) {
-          const truncatedCount = Math.max(1, Math.floor(jobs.length / 2));
-          const truncatedOutput = {
-            ...output,
-            total: truncatedCount,
-            truncated: true,
-            truncation_message: `Response truncated from ${jobs.length} to ${truncatedCount} jobs. Use a smaller 'limit' or add filters to narrow results.`,
-            jobs: jobs.slice(0, truncatedCount),
-          };
-          text = JSON.stringify(truncatedOutput, null, 2);
-        }
+        const text = JSON.stringify(output, null, 2);
 
         return {
           content: [{ type: "text", text }],
