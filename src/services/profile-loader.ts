@@ -1,10 +1,10 @@
 import fs from "fs/promises";
 import path from "path";
 import { createRequire } from "module";
+import { PDFParse } from "pdf-parse";
 import { PROFILE_DIR } from "../constants.js";
 
 const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse") as (buffer: Buffer) => Promise<{ text: string; numpages: number }>;
 const mammoth = require("mammoth") as { extractRawText: (opts: { buffer: Buffer }) => Promise<{ value: string }> };
 
 // --- Types ---
@@ -60,8 +60,10 @@ async function parseMd(filePath: string): Promise<string> {
 
 async function parsePdf(filePath: string): Promise<string> {
   const buffer = await fs.readFile(filePath);
-  const data = await pdfParse(buffer);
-  return data.text;
+  const parser = new PDFParse({ data: buffer });
+  const result = await parser.getText();
+  await parser.destroy();
+  return result.text;
 }
 
 async function parseDocx(filePath: string): Promise<string> {

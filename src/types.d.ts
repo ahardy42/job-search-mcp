@@ -4,10 +4,13 @@ declare module "random-useragent" {
 }
 
 declare module "pdf-parse" {
-  interface PdfData {
+  interface TextResult {
     text: string;
-    numpages: number;
-    info: Record<string, unknown>;
+    pages: { text: string }[];
   }
-  export default function pdfParse(buffer: Buffer): Promise<PdfData>;
+  export class PDFParse {
+    constructor(options: { url?: string; data?: Buffer | ArrayBuffer });
+    getText(options?: { partial?: number[]; first?: number; last?: number }): Promise<TextResult>;
+    destroy(): Promise<void>;
+  }
 }
