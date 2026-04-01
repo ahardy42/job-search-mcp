@@ -228,6 +228,41 @@ function buildCacheKey(params: JobSearchParams, limit: number): string {
   return parts.join("&");
 }
 
+export async function fetchJobDescription(url: string): Promise<string> {
+  const parsed = new URL(url);
+  if (parsed.hostname !== "www.linkedin.com" && parsed.hostname !== "linkedin.com") {
+    throw new Error("job_url must be a LinkedIn URL");
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error("job_url must use HTTPS");
+  }
+
+  const ua = randomUseragent.getRandom();
+  const response = await axios.get(url, {
+    headers: {
+      "User-Agent": ua,
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Encoding": "gzip, deflate, br",
+      Referer: "https://www.linkedin.com/jobs",
+      Connection: "keep-alive",
+    },
+    timeout: REQUEST_TIMEOUT_MS,
+  });
+
+  const $ = cheerio.load(response.data as string);
+  const description =
+    $(".description__text").text().trim() ||
+    $(".show-more-less-html__markup").text().trim() ||
+    $(".core-section-container__content").text().trim();
+
+  if (!description) {
+    throw new Error("Could not extract job description from the provided URL");
+  }
+
+  return description;
+}
+
 export async function searchJobs(params: JobSearchParams): Promise<JobListing[]> {
   const limit = params.limit ?? 25;
   const cacheKey = buildCacheKey(params, limit);

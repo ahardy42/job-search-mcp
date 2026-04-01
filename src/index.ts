@@ -3,6 +3,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerJobSearchTool } from "./tools/job-search.js";
+import { registerJobAlignmentTool } from "./tools/job-alignment.js";
+import { registerCoverLetterBuilderTool } from "./tools/cover-letter-builder.js";
+import { registerCompanyResearchTool } from "./tools/company-research.js";
+import { closeBrowser } from "./services/web-scraper.js";
 
 const server = new McpServer({
   name: "job-search-mcp-server",
@@ -11,6 +15,17 @@ const server = new McpServer({
 
 // Register tools
 registerJobSearchTool(server);
+registerJobAlignmentTool(server);
+registerCoverLetterBuilderTool(server);
+registerCompanyResearchTool(server);
+
+// Graceful shutdown for Playwright browser
+async function cleanup() {
+  await closeBrowser();
+  process.exit(0);
+}
+process.on("SIGINT", cleanup);
+process.on("SIGTERM", cleanup);
 
 // Start stdio transport
 async function main() {
