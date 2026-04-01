@@ -6,6 +6,7 @@ import { registerJobSearchTool } from "./tools/job-search.js";
 import { registerJobAlignmentTool } from "./tools/job-alignment.js";
 import { registerCoverLetterBuilderTool } from "./tools/cover-letter-builder.js";
 import { registerCompanyResearchTool } from "./tools/company-research.js";
+import { registerJobDescriptionSearchTool } from "./tools/job-description-search.js";
 import { closeBrowser } from "./services/web-scraper.js";
 
 const server = new McpServer({
@@ -18,6 +19,7 @@ registerJobSearchTool(server);
 registerJobAlignmentTool(server);
 registerCoverLetterBuilderTool(server);
 registerCompanyResearchTool(server);
+registerJobDescriptionSearchTool(server);
 
 // Graceful shutdown for Playwright browser
 async function cleanup() {

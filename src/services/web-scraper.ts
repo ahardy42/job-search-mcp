@@ -31,7 +31,7 @@ export interface CompanyResearchData {
 
 let browser: Browser | null = null;
 
-async function getBrowser(): Promise<Browser> {
+export async function getBrowser(): Promise<Browser> {
   if (!browser) {
     const { chromium } = await import("playwright");
     browser = await chromium.launch({

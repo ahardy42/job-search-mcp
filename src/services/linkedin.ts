@@ -235,30 +235,32 @@ export async function fetchJobDescription(url: string): Promise<string> {
     throw new Error("job_url must use HTTPS");
   }
 
-  const ua = randomUseragent.getRandom();
-  const response = await axios.get(url, {
-    headers: {
-      "User-Agent": ua,
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Accept-Encoding": "gzip, deflate, br",
-      Referer: "https://www.linkedin.com/jobs",
-      Connection: "keep-alive",
-    },
-    timeout: REQUEST_TIMEOUT_MS,
+  const { getBrowser } = await import("./web-scraper.js");
+  const browser = await getBrowser();
+  const ctx = await browser.newContext({
+    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    viewport: { width: 1280, height: 800 },
+    locale: "en-US",
   });
+  const page = await ctx.newPage();
 
-  const $ = cheerio.load(response.data as string);
-  const description =
-    $(".description__text").text().trim() ||
-    $(".show-more-less-html__markup").text().trim() ||
-    $(".core-section-container__content").text().trim();
+  try {
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
 
-  if (!description) {
-    throw new Error("Could not extract job description from the provided URL");
+    const description = await page.locator(".description__text, .show-more-less-html__markup, .core-section-container__content")
+      .first()
+      .textContent()
+      .catch(() => null);
+
+    const text = description?.trim();
+    if (!text) {
+      throw new Error("Could not extract job description from the provided URL");
+    }
+
+    return text;
+  } finally {
+    await ctx.close();
   }
-
-  return description;
 }
 
 export async function searchJobs(params: JobSearchParams): Promise<JobListing[]> {
