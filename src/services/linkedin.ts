@@ -247,6 +247,15 @@ export async function fetchJobDescription(url: string): Promise<string> {
   try {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
 
+    // Re-validate after redirects to prevent redirect-based SSRF
+    const finalUrl = new URL(page.url());
+    if (finalUrl.hostname !== "www.linkedin.com" && finalUrl.hostname !== "linkedin.com") {
+      throw new Error("Redirect led to a non-LinkedIn URL");
+    }
+    if (finalUrl.protocol !== "https:") {
+      throw new Error("Redirect led to a non-HTTPS URL");
+    }
+
     const description = await page.locator(".description__text, .show-more-less-html__markup, .core-section-container__content")
       .first()
       .textContent()
