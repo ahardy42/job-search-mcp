@@ -1,4 +1,6 @@
 import type { Browser, Page } from "playwright";
+import { lookup } from "dns/promises";
+import { isIP } from "net";
 import { RESEARCH_CACHE_TTL_MS, MAX_SEARCH_RESULTS } from "../constants.js";
 
 // --- Types ---
@@ -133,29 +135,78 @@ export async function searchDuckDuckGo(query: string): Promise<SearchResult[]> {
 
 // --- Page content scraping ---
 
-function validateExternalUrl(url: string): void {
+function isPrivateIP(ip: string): boolean {
+  // Normalize IPv4-mapped IPv6 (::ffff:1.2.3.4 -> 1.2.3.4)
+  const normalized = ip.replace(/^::ffff:/, "");
+
+  // IPv4 checks
+  if (isIP(normalized) === 4) {
+    const parts = normalized.split(".").map(Number);
+    if (
+      parts[0] === 127 ||                                   // 127.0.0.0/8 loopback
+      parts[0] === 10 ||                                    // 10.0.0.0/8 private
+      (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) || // 172.16.0.0/12 private
+      (parts[0] === 192 && parts[1] === 168) ||             // 192.168.0.0/16 private
+      (parts[0] === 169 && parts[1] === 254) ||             // 169.254.0.0/16 link-local
+      parts[0] === 0                                        // 0.0.0.0/8
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  // IPv6 checks
+  const lower = ip.toLowerCase();
+  if (
+    lower === "::1" ||                  // IPv6 loopback
+    lower.startsWith("fe80:") ||        // IPv6 link-local
+    lower.startsWith("fc") ||           // IPv6 unique local (fc00::/7)
+    lower.startsWith("fd")              // IPv6 unique local (fc00::/7)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function validateUrlFormat(url: string): URL {
   const parsed = new URL(url);
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new Error("URL must use HTTP or HTTPS");
+  if (parsed.protocol !== "https:") {
+    throw new Error("URL must use HTTPS");
   }
   const hostname = parsed.hostname;
   if (
     hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "0.0.0.0" ||
-    hostname.startsWith("10.") ||
-    hostname.startsWith("172.") ||
-    hostname.startsWith("192.168.") ||
-    hostname === "169.254.169.254" ||
     hostname.endsWith(".internal") ||
     hostname.endsWith(".local")
   ) {
     throw new Error("URL must not target internal/private network addresses");
   }
+  return parsed;
+}
+
+async function validateExternalUrl(url: string): Promise<void> {
+  const parsed = validateUrlFormat(url);
+  const hostname = parsed.hostname;
+
+  // If hostname is already an IP literal, check it directly
+  const bracketStripped = hostname.replace(/^\[|\]$/g, "");
+  if (isIP(bracketStripped)) {
+    if (isPrivateIP(bracketStripped)) {
+      throw new Error("URL must not target internal/private network addresses");
+    }
+    return;
+  }
+
+  // Resolve hostname to IP and validate the resolved address
+  const resolved = await lookup(hostname).catch(() => null);
+  if (resolved && isPrivateIP(resolved.address)) {
+    throw new Error(`URL hostname "${hostname}" resolves to private address ${resolved.address}`);
+  }
 }
 
 export async function scrapePageContent(url: string): Promise<PageContent> {
-  validateExternalUrl(url);
+  await validateExternalUrl(url);
   const b = await getBrowser();
   const ctx = await b.newContext({
     userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -166,6 +217,9 @@ export async function scrapePageContent(url: string): Promise<PageContent> {
 
   try {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
+
+    // Re-validate after redirects to prevent redirect-based SSRF
+    await validateExternalUrl(page.url());
 
     // Remove noise elements
     for (const selector of ["script", "style", "nav", "footer", "header", "aside", "[role='navigation']"]) {
