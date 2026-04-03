@@ -18,15 +18,24 @@ Load and return all profile sections (experience, skills, education, etc.) and t
 
 Research a company using DuckDuckGo web search (via Playwright). Searches for company info, recent news, and Glassdoor reviews. Optionally scrapes the company's own website. Returns structured data for "what they say vs what they actually do" analysis.
 
-## Setup
+## Installation
 
 ```bash
+git clone https://github.com/ahardy42/job-search-mcp.git && cd job-search-mcp
 npm install
 npm run build
-npx playwright install chromium  # required for company_research
+npx playwright install chromium  # required for company_research and job_description_search
 ```
 
-Requires Node.js >= 20.
+Requires **Node.js >= 20**.
+
+To verify everything works:
+
+```bash
+npm test
+```
+
+Then connect the server to your MCP client of choice (see [Connecting to Your MCP Client](#connecting-to-your-mcp-client) below).
 
 ## Profile Setup
 
@@ -163,3 +172,31 @@ npm run dev    # watch mode with tsx
 npm run build  # compile TypeScript
 npm start      # run compiled server
 ```
+
+## Testing
+
+The project uses [Vitest](https://vitest.dev) with 102 tests across unit, tool, and integration layers.
+
+```bash
+npm test          # run all tests once
+npm run test:watch  # re-run on file changes
+```
+
+**What's covered:**
+
+- **Service unit tests** — profile loading/caching, LinkedIn HTML parsing and URL building, SSRF mitigations (private IP rejection, DNS rebinding, redirect validation), HTTPS enforcement
+- **Tool unit tests** — Zod schema validation, handler responses, CHARACTER_LIMIT truncation, error handling for each of the 4 tools
+- **Integration tests** — full MCP client-server round trips using in-memory transport, tool listing, end-to-end tool calls, and input validation at the protocol level
+
+Security-focused tests verify that path traversal, SSRF protections, and input validation don't regress.
+
+## MCP Inspector
+
+The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) provides an interactive web UI for testing tool calls against the running server.
+
+```bash
+npm run inspect      # against compiled dist/ (run npm run build first)
+npm run inspect:dev  # against src/ via tsx (no build needed)
+```
+
+Opens at `http://localhost:6274` where you can browse tools, edit inputs, and see raw responses.
