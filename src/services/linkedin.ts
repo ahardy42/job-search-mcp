@@ -1,5 +1,4 @@
 import * as cheerio from "cheerio";
-import axios from "axios";
 import randomUseragent from "random-useragent";
 import {
   LINKEDIN_HOST,
@@ -189,7 +188,7 @@ function parseJobList(html: string): JobListing[] {
 
 async function fetchJobBatch(params: JobSearchParams, start: number): Promise<JobListing[]> {
   const ua = randomUseragent.getRandom();
-  const response = await axios.get(buildSearchUrl(params, start), {
+  const response = await fetch(buildSearchUrl(params, start), {
     headers: {
       "User-Agent": ua,
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -199,11 +198,16 @@ async function fetchJobBatch(params: JobSearchParams, start: number): Promise<Jo
       Connection: "keep-alive",
       "Cache-Control": "no-cache",
     },
-    timeout: REQUEST_TIMEOUT_MS,
-    validateStatus: (status) => status === 200,
-  });
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
 
-  return parseJobList(response.data as string);
+  if (!response.ok) {
+    throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+  }
+
+  const text = await response.text();
+
+  return parseJobList(text);
 }
 
 // --- Main search function ---

@@ -1,12 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock axios so no real HTTP requests are made
-vi.mock("axios", () => ({
-  default: {
-    get: vi.fn(),
-  },
-}));
-
 // Mock random-useragent
 vi.mock("random-useragent", () => ({
   default: {
@@ -19,10 +12,33 @@ vi.mock("../../src/services/web-scraper.js", () => ({
   getBrowser: vi.fn(),
 }));
 
-import axios from "axios";
-import { searchJobs, fetchJobDescription } from "../../src/services/linkedin.js";
+// Define a complete mock Response object
+const mockResponse = {
+  ok: true,
+  status: 200,
+  statusText: "OK",
+  headers: new Headers(),
+  redirected: false,
+  url: "",
+  type: "basic" as const,
+  text: vi.fn().mockResolvedValue(""),
+  json: vi.fn().mockResolvedValue({}),
+  blob: vi.fn().mockResolvedValue(new Blob()),
+  arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(0)),
+  formData: vi.fn().mockResolvedValue(new FormData()),
+  bytes: vi.fn().mockResolvedValue(new Uint8Array()),
+  clone: vi.fn(),
+  body: null,
+  bodyUsed: false,
+};
 
-const mockedAxios = vi.mocked(axios.get);
+// Set clone to return itself to avoid circular reference issues
+mockResponse.clone.mockReturnValue(mockResponse);
+
+// Mock external network services so integration tests run offline
+global.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+import { searchJobs, fetchJobDescription } from "../../src/services/linkedin.js";
 
 // Sample LinkedIn HTML response
 function buildJobListingHtml(jobs: { position: string; company: string; location: string }[]): string {
@@ -56,9 +72,9 @@ describe("linkedin service", () => {
       ]);
 
       // First call returns results, second returns empty (end of pagination)
-      mockedAxios
-        .mockResolvedValueOnce({ data: html, status: 200 })
-        .mockResolvedValueOnce({ data: "<html><body><ul></ul></body></html>", status: 200 });
+      vi.mocked(fetch)
+        .mockResolvedValueOnce({ ...mockResponse, text: vi.fn().mockResolvedValue(html) })
+        .mockResolvedValueOnce({ ...mockResponse, text: vi.fn().mockResolvedValue("<html><body><ul></ul></body></html>") });
 
       const jobs = await searchJobs({ keywords: "engineer" });
 
@@ -73,7 +89,7 @@ describe("linkedin service", () => {
     });
 
     it("builds the search URL with correct filter parameters", async () => {
-      mockedAxios.mockResolvedValue({ data: "<html><body><ul></ul></body></html>", status: 200 });
+      vi.mocked(fetch).mockResolvedValue({ ...mockResponse, text: vi.fn().mockResolvedValue("<html><body><ul></ul></body></html>") });
 
       await searchJobs({
         keywords: "typescript",
@@ -86,8 +102,8 @@ describe("linkedin service", () => {
         sortBy: "recent",
       });
 
-      expect(mockedAxios).toHaveBeenCalled();
-      const url = mockedAxios.mock.calls[0][0] as string;
+      expect(vi.mocked(fetch)).toHaveBeenCalled();
+      const url = vi.mocked(fetch).mock.calls[0][0] as string;
       expect(url).toContain("keywords=typescript");
       expect(url).toContain("location=Remote");
       expect(url).toContain("f_TPR=r604800"); // past week
@@ -99,19 +115,19 @@ describe("linkedin service", () => {
     });
 
     it("returns empty array when no results found", async () => {
-      mockedAxios.mockResolvedValue({ data: "<html><body><ul></ul></body></html>", status: 200 });
+      vi.mocked(fetch).mockResolvedValue({ ...mockResponse, text: vi.fn().mockResolvedValue("<html><body><ul></ul></body></html>") });
 
       const jobs = await searchJobs({ keywords: "nonexistent-role-xyz" });
       expect(jobs).toEqual([]);
     });
 
     it("stops after MAX_CONSECUTIVE_ERRORS", async () => {
-      mockedAxios.mockRejectedValue(new Error("Network error"));
+      vi.mocked(fetch).mockRejectedValue(new Error("Network error"));
 
       const jobs = await searchJobs({ keywords: "error-test" });
 
       // Should have retried 3 times (MAX_CONSECUTIVE_ERRORS) then stopped
-      expect(mockedAxios).toHaveBeenCalledTimes(3);
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
       expect(jobs).toEqual([]);
     });
 
@@ -126,9 +142,9 @@ describe("linkedin service", () => {
         </li>
       </ul></body></html>`;
 
-      mockedAxios
-        .mockResolvedValueOnce({ data: html, status: 200 })
-        .mockResolvedValueOnce({ data: "<html><body><ul></ul></body></html>", status: 200 });
+      vi.mocked(fetch)
+        .mockResolvedValueOnce({ ...mockResponse, text: vi.fn().mockResolvedValue(html) })
+        .mockResolvedValueOnce({ ...mockResponse, text: vi.fn().mockResolvedValue("<html><body><ul></ul></body></html>") });
 
       const jobs = await searchJobs({ keywords: "filter-test" });
       expect(jobs).toHaveLength(1);

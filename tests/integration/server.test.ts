@@ -16,12 +16,31 @@ vi.mock("../../src/constants.js", async (importOriginal) => {
   };
 });
 
+// Define a complete mock Response object
+const mockResponse = {
+  ok: true,
+  status: 200,
+  statusText: "OK",
+  headers: new Headers(),
+  redirected: false,
+  url: "",
+  type: "basic" as const,
+  text: vi.fn().mockResolvedValue(""),
+  json: vi.fn().mockResolvedValue({}),
+  blob: vi.fn().mockResolvedValue(new Blob()),
+  arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(0)),
+  formData: vi.fn().mockResolvedValue(new FormData()),
+  bytes: vi.fn().mockResolvedValue(new Uint8Array()),
+  clone: vi.fn(),
+  body: null,
+  bodyUsed: false,
+};
+
+// Set clone to return itself to avoid circular reference issues
+mockResponse.clone.mockReturnValue(mockResponse);
+
 // Mock external network services so integration tests run offline
-vi.mock("axios", () => ({
-  default: {
-    get: vi.fn(),
-  },
-}));
+global.fetch = vi.fn().mockResolvedValue(mockResponse);
 
 vi.mock("random-useragent", () => ({
   default: {
@@ -62,7 +81,6 @@ vi.mock("playwright", () => ({
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import axios from "axios";
 import { registerJobSearchTool } from "../../src/tools/job-search.js";
 import { registerProfileDataTool } from "../../src/tools/profile-data.js";
 import { registerCompanyResearchTool } from "../../src/tools/company-research.js";
@@ -153,9 +171,15 @@ describe("MCP server integration", () => {
         </li>
       </ul></body></html>`;
 
-      vi.mocked(axios.get)
-        .mockResolvedValueOnce({ data: html, status: 200 })
-        .mockResolvedValueOnce({ data: "<html><body><ul></ul></body></html>", status: 200 });
+      vi.mocked(fetch)
+        .mockResolvedValueOnce({
+          ...mockResponse,
+          text: vi.fn().mockResolvedValue(html),
+        } as Response)
+        .mockResolvedValueOnce({
+          ...mockResponse,
+          text: vi.fn().mockResolvedValue("<html><body><ul></ul></body></html>"),
+        } as Response);
 
       const result = await client.callTool({
         name: "job_search",
@@ -170,10 +194,10 @@ describe("MCP server integration", () => {
     });
 
     it("uses default parameter values when not specified", async () => {
-      vi.mocked(axios.get).mockResolvedValue({
-        data: "<html><body><ul></ul></body></html>",
-        status: 200,
-      });
+      vi.mocked(fetch).mockResolvedValue({
+        ...mockResponse,
+        text: vi.fn().mockResolvedValue("<html><body><ul></ul></body></html>"),
+      } as Response);
 
       const result = await client.callTool({
         name: "job_search",
