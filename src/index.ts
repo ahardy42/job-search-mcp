@@ -3,8 +3,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerJobSearchTool } from "./tools/job-search.js";
-import { registerJobAlignmentTool } from "./tools/job-alignment.js";
-import { registerCoverLetterBuilderTool } from "./tools/cover-letter-builder.js";
+import { registerProfileDataTool } from "./tools/profile-data.js";
 import { registerCompanyResearchTool } from "./tools/company-research.js";
 import { registerJobDescriptionSearchTool } from "./tools/job-description-search.js";
 import { closeBrowser } from "./services/web-scraper.js";
@@ -16,8 +15,7 @@ const server = new McpServer({
 
 // Register tools
 registerJobSearchTool(server);
-registerJobAlignmentTool(server);
-registerCoverLetterBuilderTool(server);
+registerProfileDataTool(server);
 registerCompanyResearchTool(server);
 registerJobDescriptionSearchTool(server);
 

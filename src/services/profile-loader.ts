@@ -25,32 +25,13 @@ export interface ProfileSection {
   id: string;
   label: string;
   content: string;
-  keywords: string[];
 }
 
 export interface UserProfile {
   sections: ProfileSection[];
-  allKeywords: string[];
   rawText: string;
   loadedAt: Date;
 }
-
-// --- Stop words for keyword extraction ---
-
-const STOP_WORDS = new Set([
-  "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-  "of", "with", "by", "from", "is", "was", "are", "were", "be", "been",
-  "being", "have", "has", "had", "do", "does", "did", "will", "would",
-  "could", "should", "may", "might", "shall", "can", "need", "must",
-  "that", "this", "these", "those", "it", "its", "i", "me", "my",
-  "we", "our", "you", "your", "he", "she", "they", "them", "their",
-  "what", "which", "who", "whom", "where", "when", "why", "how",
-  "all", "each", "every", "both", "few", "more", "most", "other",
-  "some", "such", "no", "not", "only", "own", "same", "so", "than",
-  "too", "very", "just", "about", "above", "after", "again", "also",
-  "as", "because", "before", "between", "during", "if", "into", "over",
-  "then", "through", "under", "until", "up", "while",
-]);
 
 // --- File parsers ---
 
@@ -86,18 +67,6 @@ async function parseFile(filePath: string, format: string): Promise<string> {
   }
 }
 
-// --- Keyword extraction ---
-
-export function extractKeywords(text: string): string[] {
-  const words = text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s\-\+\#]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 1 && !STOP_WORDS.has(w));
-
-  return [...new Set(words)];
-}
-
 // --- Profile cache ---
 
 let cachedProfile: UserProfile | null = null;
@@ -124,26 +93,22 @@ export async function refreshProfile(): Promise<UserProfile> {
       throw new Error(`Profile source "${entry.source}" resolves outside the profile directory`);
     }
     const content = await parseFile(filePath, entry.format);
-    const keywords = extractKeywords(content);
 
     sections.push({
       id: entry.id,
       label: entry.label,
       content,
-      keywords,
     });
   }
 
   const rawText = sections.map((s) => s.content).join("\n\n");
-  const allKeywords = [...new Set(sections.flatMap((s) => s.keywords))];
 
   cachedProfile = {
     sections,
-    allKeywords,
     rawText,
     loadedAt: new Date(),
   };
 
-  console.error(`[profile-loader] Loaded ${sections.length} sections, ${allKeywords.length} unique keywords`);
+  console.error(`[profile-loader] Loaded ${sections.length} sections`);
   return cachedProfile;
 }

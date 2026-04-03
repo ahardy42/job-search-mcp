@@ -1,6 +1,6 @@
 # job-search-mcp-server
 
-A stdio MCP server for job searching, profile alignment, cover letter building, and company research. Exposes 4 tools to any MCP-compatible client.
+A stdio MCP server for job searching, profile loading, and company research. Exposes 4 tools to any MCP-compatible client.
 
 ## Tools
 
@@ -10,13 +10,9 @@ Search LinkedIn for job listings with filters for keywords, location, job type, 
 
 Defaults are tuned for **senior, remote, full-time** roles posted in the **past week**.
 
-### `job_alignment`
+### `profile_data`
 
-Compare your profile against a job description. Returns matched/missing keywords and your most relevant profile sections ranked by overlap. Provide a job description as text or a LinkedIn URL.
-
-### `cover_letter_builder`
-
-Assemble structured context from your profile to help the calling LLM write a targeted cover letter. Returns matched experience mapped to job requirements, talking points, and a suggested letter structure. Supports tone selection (`formal`/`conversational`) and focus area boosting.
+Load and return all profile sections (experience, skills, education, etc.) and the full concatenated text. The calling LLM uses this data directly for job alignment analysis, cover letter writing, or any other profile-based task.
 
 ### `company_research`
 
@@ -34,7 +30,7 @@ Requires Node.js >= 20.
 
 ## Profile Setup
 
-The `job_alignment` and `cover_letter_builder` tools require a profile directory with your experience data.
+The `profile_data` tool requires a profile directory with your experience data.
 
 1. Create a `profile/` directory in the project root (it's gitignored)
 2. Add your files (Markdown, PDF, or DOCX)
