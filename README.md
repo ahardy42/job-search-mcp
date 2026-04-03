@@ -14,6 +14,10 @@ Defaults are tuned for **senior, remote, full-time** roles posted in the **past 
 
 Load and return all profile sections (experience, skills, education, etc.) and the full concatenated text. The calling LLM uses this data directly for job alignment analysis, cover letter writing, or any other profile-based task.
 
+### `job_description_search`
+
+Fetch full job descriptions from LinkedIn job URLs. Accepts a list of URLs (from `job_search` results) and returns the complete description text for each. Fetches run in parallel batches with delays to avoid rate limiting.
+
 ### `company_research`
 
 Research a company using DuckDuckGo web search (via Playwright). Searches for company info, recent news, and Glassdoor reviews. Optionally scrapes the company's own website. Returns structured data for "what they say vs what they actually do" analysis.
