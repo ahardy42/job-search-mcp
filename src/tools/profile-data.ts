@@ -1,6 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getProfile } from "../services/profile-loader.js";
-import { CHARACTER_LIMIT } from "../constants.js";
 
 export function registerProfileDataTool(server: McpServer): void {
   server.registerTool(
@@ -44,20 +43,7 @@ Notes:
           loaded_at: profile.loadedAt.toISOString(),
         };
 
-        let text = JSON.stringify(output, null, 2);
-
-        if (text.length > CHARACTER_LIMIT) {
-          const trimmed = {
-            ...output,
-            sections: output.sections.map((s) => ({
-              ...s,
-              content: s.content.slice(0, 500) + (s.content.length > 500 ? "..." : ""),
-            })),
-            raw_text: "[truncated — use individual section content above]",
-            truncated: true,
-          };
-          text = JSON.stringify(trimmed, null, 2);
-        }
+        const text = JSON.stringify(output, null, 2);
 
         return {
           content: [{ type: "text", text }],

@@ -3,3 +3,4 @@ dist/
 *.tsbuildinfo
 .env
 profile/
+.ds_store

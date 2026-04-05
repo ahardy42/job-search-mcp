@@ -152,7 +152,6 @@ describe("profile-loader", () => {
         // Use resetModules + doMock to get a fresh profile-loader with the new PROFILE_DIR
         vi.resetModules();
         vi.doMock("../../src/constants.js", () => ({
-          CHARACTER_LIMIT: 25000,
           PROFILE_DIR: tmpDir,
         }));
 
@@ -187,7 +186,6 @@ describe("profile-loader", () => {
 
         vi.resetModules();
         vi.doMock("../../src/constants.js", () => ({
-          CHARACTER_LIMIT: 25000,
           PROFILE_DIR: tmpDir,
         }));
 
@@ -225,7 +223,6 @@ describe("profile-loader", () => {
 
         vi.resetModules();
         vi.doMock("../../src/constants.js", () => ({
-          CHARACTER_LIMIT: 25000,
           PROFILE_DIR: tmpDir,
         }));
 

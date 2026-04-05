@@ -8,7 +8,6 @@ vi.mock("../../src/services/profile-loader.js", () => ({
 
 import { getProfile } from "../../src/services/profile-loader.js";
 import { registerProfileDataTool } from "../../src/tools/profile-data.js";
-import { CHARACTER_LIMIT } from "../../src/constants.js";
 
 const mockedGetProfile = vi.mocked(getProfile);
 
@@ -66,41 +65,6 @@ describe("profile-data tool", () => {
     expect(parsed.sections[0].content).toBe("5 years at Acme");
     expect(parsed.raw_text).toContain("5 years at Acme");
     expect(parsed.loaded_at).toBe("2025-04-01T12:00:00.000Z");
-  });
-
-  it("truncates output when exceeding CHARACTER_LIMIT", async () => {
-    const longContent = "x".repeat(20000);
-    mockedGetProfile.mockResolvedValue({
-      sections: [
-        { id: "exp", label: "Experience", content: longContent },
-        { id: "skills", label: "Skills", content: longContent },
-      ],
-      rawText: longContent + "\n\n" + longContent,
-      loadedAt: new Date("2025-04-01T12:00:00Z"),
-    });
-
-    const result = await tool.handler({});
-    const parsed = JSON.parse(result.content[0].text);
-
-    expect(parsed.truncated).toBe(true);
-    expect(parsed.raw_text).toBe("[truncated — use individual section content above]");
-    // Section content should be truncated to 500 chars + "..."
-    expect(parsed.sections[0].content.length).toBeLessThanOrEqual(504); // 500 + "..."
-  });
-
-  it("does not truncate when under CHARACTER_LIMIT", async () => {
-    mockedGetProfile.mockResolvedValue({
-      sections: [{ id: "exp", label: "Experience", content: "Short content" }],
-      rawText: "Short content",
-      loadedAt: new Date("2025-04-01T12:00:00Z"),
-    });
-
-    const result = await tool.handler({});
-    const parsed = JSON.parse(result.content[0].text);
-
-    expect(parsed.truncated).toBeUndefined();
-    expect(parsed.raw_text).toBe("Short content");
-    expect(parsed.sections[0].content).toBe("Short content");
   });
 
   it("returns error message when profile loading fails", async () => {
