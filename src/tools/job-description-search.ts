@@ -72,7 +72,7 @@ Notes:
         }
       }
 
-      const text = JSON.stringify(results, null, 2);
+      const text = JSON.stringify(results);
       return {
         content: [{ type: "text", text }],
       };

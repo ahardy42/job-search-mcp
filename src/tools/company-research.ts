@@ -54,7 +54,7 @@ Notes:
       try {
         const data = await researchCompany(params.company_name, params.company_url);
 
-        let text = JSON.stringify(data, null, 2);
+        let text = JSON.stringify(data);
 
         if (text.length > CHARACTER_LIMIT) {
           const trimmed = {
@@ -66,7 +66,7 @@ Notes:
             sources: data.sources.slice(0, 10),
             truncated: true,
           };
-          text = JSON.stringify(trimmed, null, 2);
+          text = JSON.stringify(trimmed);
         }
 
         return {

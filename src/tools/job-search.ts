@@ -124,7 +124,7 @@ Notes:
           jobs,
         };
 
-        const text = JSON.stringify(output, null, 2);
+        const text = JSON.stringify(output);
 
         return {
           content: [{ type: "text", text }],
