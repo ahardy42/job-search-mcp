@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { researchCompany } from "../services/web-scraper.js";
+import { fetchCompanyProfile } from "../services/himalayas.js";
 import { CHARACTER_LIMIT } from "../constants.js";
 
 const CompanyResearchInputSchema = {
@@ -13,6 +14,10 @@ const CompanyResearchInputSchema = {
     .url()
     .optional()
     .describe("Company website URL for direct scraping (e.g. their About page)"),
+  himalayas_slug: z
+    .string()
+    .optional()
+    .describe("Himalayas company slug (from job_search results companySlug field) to fetch their Himalayas profile"),
 };
 
 export function registerCompanyResearchTool(server: McpServer): void {
@@ -20,13 +25,14 @@ export function registerCompanyResearchTool(server: McpServer): void {
     "company_research",
     {
       title: "Company Research",
-      description: `Research a company using web search and optional website scraping.
+      description: `Research a company using web search, optional website scraping, and Himalayas company profiles.
 
-Searches DuckDuckGo for company information, recent news, and Glassdoor reviews. Optionally scrapes the company's own website. Returns structured data for the calling LLM to synthesize into a "what they say vs what they actually do" analysis.
+Searches DuckDuckGo for company information, recent news, and Glassdoor reviews. Optionally scrapes the company's own website. If a himalayas_slug is provided (from job_search results), also fetches the company's Himalayas profile page (https://himalayas.app/companies/{slug}) which contains structured company data. Returns structured data for the calling LLM to synthesize.
 
 Args:
   - company_name (string, required): The company to research
   - company_url (string, optional): Direct URL to scrape (e.g. company About page)
+  - himalayas_slug (string, optional): Company slug from job_search results to fetch Himalayas profile
 
 Returns:
   JSON object with:
@@ -35,6 +41,7 @@ Returns:
   - recent_news: Recent headlines about the company
   - glassdoor_signals: Snippets from Glassdoor search results
   - raw_about_page: Scraped text from company URL (if provided)
+  - himalayas_profile: Structured data from Himalayas company page (if slug provided)
   - sources: URLs of all sources consulted
 
 Notes:
@@ -52,13 +59,27 @@ Notes:
     },
     async (params) => {
       try {
-        const data = await researchCompany(params.company_name, params.company_url);
+        // Run web research and Himalayas profile fetch in parallel
+        const [data, himalayasProfile] = await Promise.all([
+          researchCompany(params.company_name, params.company_url),
+          params.himalayas_slug
+            ? fetchCompanyProfile(params.himalayas_slug).catch((e) => {
+                console.error(`[company_research] Himalayas profile failed: ${e}`);
+                return null;
+              })
+            : Promise.resolve(null),
+        ]);
 
-        let text = JSON.stringify(data);
+        const output = {
+          ...data,
+          himalayas_profile: himalayasProfile,
+        };
+
+        let text = JSON.stringify(output);
 
         if (text.length > CHARACTER_LIMIT) {
           const trimmed = {
-            ...data,
+            ...output,
             products_services: data.products_services.slice(0, 3),
             recent_news: data.recent_news.slice(0, 3),
             glassdoor_signals: data.glassdoor_signals.slice(0, 2),

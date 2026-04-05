@@ -12,6 +12,12 @@ vi.mock("../../src/services/web-scraper.js", () => ({
   getBrowser: vi.fn(),
 }));
 
+// Mock job-cache
+vi.mock("../../src/services/job-cache.js", () => ({
+  getCachedJobs: vi.fn(() => null),
+  setCachedJobs: vi.fn(),
+}));
+
 // Define a complete mock Response object
 const mockResponse = {
   ok: true,
@@ -39,6 +45,7 @@ mockResponse.clone.mockReturnValue(mockResponse);
 global.fetch = vi.fn().mockResolvedValue(mockResponse);
 
 import { searchJobs, fetchJobDescription } from "../../src/services/linkedin.js";
+import { getCachedJobs, setCachedJobs } from "../../src/services/job-cache.js";
 
 // Sample LinkedIn HTML response
 function buildJobListingHtml(jobs: { position: string; company: string; location: string }[]): string {
@@ -85,7 +92,9 @@ describe("linkedin service", () => {
       expect(jobs[0].salary).toBe("$120,000 - $160,000");
       expect(jobs[0].jobUrl).toBe("https://www.linkedin.com/jobs/view/123");
       expect(jobs[0].agoTime).toBe("2 days ago");
+      expect(jobs[0].source).toBe("linkedin");
       expect(jobs[1].position).toBe("Staff Engineer");
+      expect(jobs[1].source).toBe("linkedin");
     });
 
     it("builds the search URL with correct filter parameters", async () => {
@@ -129,6 +138,32 @@ describe("linkedin service", () => {
       // Should have retried 3 times (MAX_CONSECUTIVE_ERRORS) then stopped
       expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
       expect(jobs).toEqual([]);
+    });
+
+    it("uses shared job cache for storing results", async () => {
+      const html = buildJobListingHtml([
+        { position: "Cache Test", company: "CacheCo", location: "Remote" },
+      ]);
+      vi.mocked(fetch)
+        .mockResolvedValueOnce({ ...mockResponse, text: vi.fn().mockResolvedValue(html) })
+        .mockResolvedValueOnce({ ...mockResponse, text: vi.fn().mockResolvedValue("<html><body><ul></ul></body></html>") });
+
+      await searchJobs({ keywords: "cache-store-test" });
+
+      expect(vi.mocked(setCachedJobs)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(setCachedJobs).mock.calls[0][0]).toContain("linkedin:");
+    });
+
+    it("returns cached results when available", async () => {
+      const cachedJobs = [{
+        position: "Cached", company: "Co", location: "Remote",
+        date: "", salary: "", jobUrl: "", agoTime: "", source: "linkedin" as const,
+      }];
+      vi.mocked(getCachedJobs).mockReturnValueOnce(cachedJobs);
+
+      const jobs = await searchJobs({ keywords: "cached-query" });
+      expect(jobs).toBe(cachedJobs);
+      expect(fetch).not.toHaveBeenCalled();
     });
 
     it("skips list items without position or company", async () => {

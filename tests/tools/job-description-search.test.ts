@@ -4,11 +4,16 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 vi.mock("../../src/services/linkedin.js", () => ({
   fetchJobDescription: vi.fn(),
 }));
+vi.mock("../../src/services/himalayas.js", () => ({
+  fetchJobDescription: vi.fn(),
+}));
 
-import { fetchJobDescription } from "../../src/services/linkedin.js";
+import { fetchJobDescription as fetchLinkedIn } from "../../src/services/linkedin.js";
+import { fetchJobDescription as fetchHimalayas } from "../../src/services/himalayas.js";
 import { registerJobDescriptionSearchTool } from "../../src/tools/job-description-search.js";
 
-const mockedFetchJobDescription = vi.mocked(fetchJobDescription);
+const mockedFetchLinkedIn = vi.mocked(fetchLinkedIn);
+const mockedFetchHimalayas = vi.mocked(fetchHimalayas);
 
 function captureToolHandler(server: McpServer) {
   const registerSpy = vi.spyOn(server, "registerTool");
@@ -40,51 +45,74 @@ describe("job-description-search tool", () => {
     expect(tool.config.annotations.destructiveHint).toBe(false);
   });
 
-  it("fetches descriptions for a single URL", async () => {
-    mockedFetchJobDescription.mockResolvedValue("Full job description text");
+  it("routes LinkedIn URLs to the LinkedIn fetcher", async () => {
+    mockedFetchLinkedIn.mockResolvedValue("LinkedIn description");
 
     const result = await tool.handler({
       urls: ["https://www.linkedin.com/jobs/view/123"],
     });
     const parsed = JSON.parse(result.content[0].text);
 
-    expect(parsed).toHaveLength(1);
-    expect(parsed[0].url).toBe("https://www.linkedin.com/jobs/view/123");
-    expect(parsed[0].description).toBe("Full job description text");
+    expect(mockedFetchLinkedIn).toHaveBeenCalledWith("https://www.linkedin.com/jobs/view/123");
+    expect(mockedFetchHimalayas).not.toHaveBeenCalled();
+    expect(parsed[0].source).toBe("linkedin");
+    expect(parsed[0].description).toBe("LinkedIn description");
   });
 
-  it("fetches descriptions for multiple URLs", async () => {
-    mockedFetchJobDescription
-      .mockResolvedValueOnce("Description A")
-      .mockResolvedValueOnce("Description B")
-      .mockResolvedValueOnce("Description C");
+  it("routes Himalayas URLs to the Himalayas fetcher", async () => {
+    mockedFetchHimalayas.mockResolvedValue("Himalayas description");
+
+    const result = await tool.handler({
+      urls: ["https://himalayas.app/companies/testco/jobs/eng-123"],
+    });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(mockedFetchHimalayas).toHaveBeenCalledWith("https://himalayas.app/companies/testco/jobs/eng-123");
+    expect(mockedFetchLinkedIn).not.toHaveBeenCalled();
+    expect(parsed[0].source).toBe("himalayas");
+    expect(parsed[0].description).toBe("Himalayas description");
+  });
+
+  it("handles mixed URLs from both sources", async () => {
+    mockedFetchLinkedIn.mockResolvedValue("LinkedIn desc");
+    mockedFetchHimalayas.mockResolvedValue("Himalayas desc");
 
     const result = await tool.handler({
       urls: [
         "https://www.linkedin.com/jobs/view/1",
-        "https://www.linkedin.com/jobs/view/2",
-        "https://www.linkedin.com/jobs/view/3",
+        "https://himalayas.app/companies/co/jobs/eng-1",
       ],
     });
     const parsed = JSON.parse(result.content[0].text);
 
-    expect(parsed).toHaveLength(3);
-    expect(parsed[0].description).toBe("Description A");
-    expect(parsed[1].description).toBe("Description B");
-    expect(parsed[2].description).toBe("Description C");
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].source).toBe("linkedin");
+    expect(parsed[0].description).toBe("LinkedIn desc");
+    expect(parsed[1].source).toBe("himalayas");
+    expect(parsed[1].description).toBe("Himalayas desc");
+  });
+
+  it("rejects unsupported hosts with error message", async () => {
+    const result = await tool.handler({
+      urls: ["https://evil.com/jobs/123"],
+    });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed[0].description).toContain("Error:");
+    expect(parsed[0].description).toContain("Unsupported host");
   });
 
   it("reports individual URL errors without failing the batch", async () => {
-    mockedFetchJobDescription
+    mockedFetchLinkedIn
       .mockResolvedValueOnce("Good description")
-      .mockRejectedValueOnce(new Error("job_url must be a LinkedIn URL"))
-      .mockResolvedValueOnce("Another good one");
+      .mockRejectedValueOnce(new Error("Failed to extract"));
+    mockedFetchHimalayas.mockResolvedValueOnce("Himalayas good");
 
     const result = await tool.handler({
       urls: [
         "https://www.linkedin.com/jobs/view/1",
         "https://www.linkedin.com/jobs/view/2",
-        "https://www.linkedin.com/jobs/view/3",
+        "https://himalayas.app/companies/co/jobs/eng-1",
       ],
     });
     const parsed = JSON.parse(result.content[0].text);
@@ -92,37 +120,53 @@ describe("job-description-search tool", () => {
     expect(parsed).toHaveLength(3);
     expect(parsed[0].description).toBe("Good description");
     expect(parsed[1].description).toContain("Error:");
-    expect(parsed[1].description).toContain("LinkedIn URL");
-    expect(parsed[2].description).toBe("Another good one");
+    expect(parsed[2].description).toBe("Himalayas good");
   });
 
   it("processes URLs in batches of 3 (concurrency limit)", async () => {
-    // 5 URLs should result in 2 batches: [0,1,2] and [3,4]
-    const urls = Array.from({ length: 5 }, (_, i) => `https://www.linkedin.com/jobs/view/${i}`);
-    mockedFetchJobDescription.mockResolvedValue("Description");
+    const urls = [
+      ...Array.from({ length: 3 }, (_, i) => `https://www.linkedin.com/jobs/view/${i}`),
+      ...Array.from({ length: 2 }, (_, i) => `https://himalayas.app/companies/co/jobs/eng-${i}`),
+    ];
+    mockedFetchLinkedIn.mockResolvedValue("LI desc");
+    mockedFetchHimalayas.mockResolvedValue("HI desc");
 
     const result = await tool.handler({ urls });
     const parsed = JSON.parse(result.content[0].text);
 
     expect(parsed).toHaveLength(5);
-    expect(mockedFetchJobDescription).toHaveBeenCalledTimes(5);
+    expect(mockedFetchLinkedIn).toHaveBeenCalledTimes(3);
+    expect(mockedFetchHimalayas).toHaveBeenCalledTimes(2);
   });
 
   it("preserves URL-to-description mapping order", async () => {
-    const urls = [
-      "https://www.linkedin.com/jobs/view/AAA",
-      "https://www.linkedin.com/jobs/view/BBB",
-    ];
-    mockedFetchJobDescription
-      .mockResolvedValueOnce("First")
-      .mockResolvedValueOnce("Second");
+    mockedFetchLinkedIn.mockResolvedValueOnce("First");
+    mockedFetchHimalayas.mockResolvedValueOnce("Second");
 
-    const result = await tool.handler({ urls });
+    const result = await tool.handler({
+      urls: [
+        "https://www.linkedin.com/jobs/view/AAA",
+        "https://himalayas.app/companies/co/jobs/BBB",
+      ],
+    });
     const parsed = JSON.parse(result.content[0].text);
 
     expect(parsed[0].url).toContain("AAA");
     expect(parsed[0].description).toBe("First");
     expect(parsed[1].url).toContain("BBB");
     expect(parsed[1].description).toBe("Second");
+  });
+
+  it("includes source field in each result", async () => {
+    mockedFetchLinkedIn.mockResolvedValue("desc");
+
+    const result = await tool.handler({
+      urls: ["https://www.linkedin.com/jobs/view/1"],
+    });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed[0]).toHaveProperty("source");
+    expect(parsed[0]).toHaveProperty("url");
+    expect(parsed[0]).toHaveProperty("description");
   });
 });

@@ -16,6 +16,12 @@ vi.mock("../../src/constants.js", async (importOriginal) => {
   };
 });
 
+// Mock job-cache
+vi.mock("../../src/services/job-cache.js", () => ({
+  getCachedJobs: vi.fn(() => null),
+  setCachedJobs: vi.fn(),
+}));
+
 // Define a complete mock Response object
 const mockResponse = {
   ok: true,
@@ -159,7 +165,7 @@ describe("MCP server integration", () => {
   });
 
   describe("job_search tool call", () => {
-    it("returns job listings from mocked LinkedIn response", async () => {
+    it("returns job listings from mocked responses", async () => {
       const html = `<html><body><ul>
         <li>
           <div class="base-search-card__title">Integration Test Engineer</div>
@@ -171,10 +177,16 @@ describe("MCP server integration", () => {
         </li>
       </ul></body></html>`;
 
+      // LinkedIn: first call returns HTML, second returns empty (end of pagination)
+      // Himalayas: returns JSON with empty results
       vi.mocked(fetch)
         .mockResolvedValueOnce({
           ...mockResponse,
           text: vi.fn().mockResolvedValue(html),
+        } as Response)
+        .mockResolvedValueOnce({
+          ...mockResponse,
+          json: vi.fn().mockResolvedValue({ totalCount: 0, jobs: [] }),
         } as Response)
         .mockResolvedValueOnce({
           ...mockResponse,
@@ -188,15 +200,18 @@ describe("MCP server integration", () => {
       const text = (result.content as any[])[0].text;
       const parsed = JSON.parse(text);
 
-      expect(parsed.total).toBe(1);
-      expect(parsed.jobs[0].position).toBe("Integration Test Engineer");
-      expect(parsed.jobs[0].company).toBe("IntegrationCo");
+      expect(parsed.total).toBeGreaterThanOrEqual(1);
+      expect(parsed).toHaveProperty("sources");
+      const liJob = parsed.jobs.find((j: any) => j.position === "Integration Test Engineer");
+      expect(liJob).toBeDefined();
+      expect(liJob.company).toBe("IntegrationCo");
     });
 
     it("uses default parameter values when not specified", async () => {
       vi.mocked(fetch).mockResolvedValue({
         ...mockResponse,
         text: vi.fn().mockResolvedValue("<html><body><ul></ul></body></html>"),
+        json: vi.fn().mockResolvedValue({ totalCount: 0, jobs: [] }),
       } as Response);
 
       const result = await client.callTool({
@@ -210,7 +225,7 @@ describe("MCP server integration", () => {
   });
 
   describe("job_description_search tool call", () => {
-    it("returns error for non-LinkedIn URLs", async () => {
+    it("returns error for unsupported host URLs", async () => {
       const result = await client.callTool({
         name: "job_description_search",
         arguments: {
@@ -221,7 +236,7 @@ describe("MCP server integration", () => {
       const parsed = JSON.parse(text);
 
       expect(parsed[0].description).toContain("Error:");
-      expect(parsed[0].description).toContain("LinkedIn URL");
+      expect(parsed[0].description).toContain("Unsupported host");
     });
 
     it("returns error for HTTP (non-HTTPS) LinkedIn URLs", async () => {
@@ -237,10 +252,23 @@ describe("MCP server integration", () => {
       expect(parsed[0].description).toContain("Error:");
       expect(parsed[0].description).toContain("HTTPS");
     });
+
+    it("includes source field in results", async () => {
+      const result = await client.callTool({
+        name: "job_description_search",
+        arguments: {
+          urls: ["https://www.linkedin.com/jobs/view/123"],
+        },
+      });
+      const text = (result.content as any[])[0].text;
+      const parsed = JSON.parse(text);
+
+      expect(parsed[0]).toHaveProperty("source", "linkedin");
+    });
   });
 
   describe("company_research tool call", () => {
-    it("returns structured research data", async () => {
+    it("returns structured research data with himalayas_profile field", async () => {
       const result = await client.callTool({
         name: "company_research",
         arguments: { company_name: "TestCo" },
@@ -253,6 +281,7 @@ describe("MCP server integration", () => {
       expect(parsed).toHaveProperty("products_services");
       expect(parsed).toHaveProperty("recent_news");
       expect(parsed).toHaveProperty("sources");
+      expect(parsed).toHaveProperty("himalayas_profile");
     });
   });
 

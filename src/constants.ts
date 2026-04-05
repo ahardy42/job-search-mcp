@@ -11,6 +11,11 @@ export const REQUEST_TIMEOUT_MS = 10000;
 export const MAX_CONSECUTIVE_ERRORS = 3;
 export const BASE_DELAY_MS = 2000;
 
+export const HIMALAYAS_HOST = "himalayas.app";
+export const HIMALAYAS_API_BASE = "https://himalayas.app/jobs/api";
+export const HIMALAYAS_PAGE_SIZE = 20;
+export const HIMALAYAS_MAX_COUNT = 100;
+
 export const PROFILE_DIR = process.env.PROFILE_DIR || path.resolve(__dirname, "..", "profile");
 export const RESEARCH_CACHE_TTL_MS = 1000 * 60 * 60 * 24; // 24 hours
 export const MAX_SEARCH_RESULTS = 10;

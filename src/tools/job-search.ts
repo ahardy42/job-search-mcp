@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { searchJobs } from "../services/linkedin.js";
+import { searchJobs as searchLinkedIn } from "../services/linkedin.js";
+import { searchJobs as searchHimalayas } from "../services/himalayas.js";
+import type { JobListing } from "../services/linkedin.js";
 
 const JobSearchInputSchema = {
   keywords: z
@@ -39,14 +41,47 @@ const JobSearchInputSchema = {
     .describe("Sort order for results"),
 };
 
+function dedupeKey(job: JobListing): string {
+  return (
+    job.company.toLowerCase().trim() +
+    "|" +
+    job.position.toLowerCase().trim()
+  ).replace(/\s+/g, " ");
+}
+
+function deduplicateJobs(jobs: JobListing[]): JobListing[] {
+  const seen = new Map<string, JobListing>();
+  for (const job of jobs) {
+    const key = dedupeKey(job);
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, job);
+    } else {
+      // Prefer the listing with more data (salary info, description)
+      const existingScore =
+        (existing.salary !== "Not specified" ? 1 : 0) +
+        (existing.description ? 1 : 0) +
+        (existing.minSalary != null ? 1 : 0);
+      const newScore =
+        (job.salary !== "Not specified" ? 1 : 0) +
+        (job.description ? 1 : 0) +
+        (job.minSalary != null ? 1 : 0);
+      if (newScore > existingScore) {
+        seen.set(key, job);
+      }
+    }
+  }
+  return [...seen.values()];
+}
+
 export function registerJobSearchTool(server: McpServer): void {
   server.registerTool(
     "job_search",
     {
-      title: "Search LinkedIn Jobs",
-      description: `Search for job listings on LinkedIn using various filters.
+      title: "Search Jobs",
+      description: `Search for job listings across LinkedIn and Himalayas using various filters.
 
-Scrapes LinkedIn's public job search to find current openings. Returns structured job listing data including position title, company, location, posting date, salary (when available), and a direct link to the listing.
+Searches LinkedIn's public job listings and the Himalayas remote jobs API in parallel, de-duplicates results, and returns structured job data including position title, company, location, posting date, salary (when available), and a direct link to the listing.
 
 Default filters are tuned for senior remote full-time roles posted in the past week. Override any filter via the input parameters.
 
@@ -61,24 +96,23 @@ Args:
   - sort_by (enum): "recent" or "relevant"
 
 Returns:
-  JSON array of job listings:
-  [
-    {
-      "position": "Senior Software Engineer",
-      "company": "Acme Corp",
-      "location": "Remote",
-      "date": "2025-03-28",
-      "salary": "$120,000 - $160,000",
-      "jobUrl": "https://www.linkedin.com/jobs/view/...",
-      "agoTime": "2 days ago"
-    }
-  ]
+  JSON object with:
+  - total: number of de-duplicated results
+  - sources: breakdown of results per source
+  - query: the search parameters used
+  - jobs: array of job listings, each with:
+    - position, company, location, date, salary, jobUrl, agoTime, source
+    - Himalayas results include additional fields: companySlug, employmentType,
+      minSalary, maxSalary, currency, seniority, categories, locationRestrictions,
+      timezoneRestrictions, applicationLink, guid, excerpt, expiryDate, description
+    - Note: the guid field often maps to the Himalayas job listing HTML page,
+      making it useful for scraping full job descriptions via job_description_search tool
 
 Notes:
-  - LinkedIn may rate-limit aggressive scraping; the tool implements backoff and caching (1hr TTL)
-  - Results are cached; identical queries within 1 hour return cached data
-  - Returns all available results from LinkedIn for the given filters
-  - If no results are found, returns an empty array with a message`,
+  - Results are de-duplicated across sources by company + position
+  - LinkedIn may rate-limit; the tool implements backoff and caching (1hr TTL)
+  - Himalayas API is free and requires no auth; results cached 1hr
+  - If one source fails, results from the other are still returned`,
       inputSchema: JobSearchInputSchema,
       annotations: {
         readOnlyHint: true,
@@ -89,7 +123,7 @@ Notes:
     },
     async (params) => {
       try {
-        const jobs = await searchJobs({
+        const searchParams = {
           keywords: params.keywords,
           location: params.location,
           dateSincePosted: params.date_posted,
@@ -98,9 +132,43 @@ Notes:
           experienceLevel: params.experience_level,
           salary: params.salary,
           sortBy: params.sort_by,
-        });
+        };
 
-        if (jobs.length === 0) {
+        // Search both sources in parallel
+        const [linkedInJobs, himalayasJobs] = await Promise.allSettled([
+          searchLinkedIn(searchParams),
+          searchHimalayas(searchParams),
+        ]);
+
+        const allJobs: JobListing[] = [];
+        const sourceCounts = { linkedin: 0, himalayas: 0 };
+
+        if (linkedInJobs.status === "fulfilled") {
+          allJobs.push(...linkedInJobs.value);
+          sourceCounts.linkedin = linkedInJobs.value.length;
+        } else {
+          console.error(`[job_search] LinkedIn search failed: ${linkedInJobs.reason}`);
+        }
+
+        if (himalayasJobs.status === "fulfilled") {
+          allJobs.push(...himalayasJobs.value);
+          sourceCounts.himalayas = himalayasJobs.value.length;
+        } else {
+          console.error(`[job_search] Himalayas search failed: ${himalayasJobs.reason}`);
+        }
+
+        const deduped = deduplicateJobs(allJobs);
+
+        // Sort by date descending if sort_by is "recent"
+        if (params.sort_by === "recent") {
+          deduped.sort((a, b) => {
+            const dateA = a.date ? new Date(a.date).getTime() : 0;
+            const dateB = b.date ? new Date(b.date).getTime() : 0;
+            return dateB - dateA;
+          });
+        }
+
+        if (deduped.length === 0) {
           return {
             content: [
               {
@@ -112,7 +180,12 @@ Notes:
         }
 
         const output = {
-          total: jobs.length,
+          total: deduped.length,
+          sources: {
+            linkedin: sourceCounts.linkedin,
+            himalayas: sourceCounts.himalayas,
+            after_dedup: deduped.length,
+          },
           query: {
             keywords: params.keywords,
             location: params.location,
@@ -121,7 +194,7 @@ Notes:
             remote_filter: params.remote_filter,
             experience_level: params.experience_level,
           },
-          jobs,
+          jobs: deduped,
         };
 
         const text = JSON.stringify(output);
@@ -135,7 +208,7 @@ Notes:
           content: [
             {
               type: "text",
-              text: `Error searching jobs: ${msg}. This may be due to LinkedIn rate limiting. Try again in a few minutes or adjust your search parameters.`,
+              text: `Error searching jobs: ${msg}. This may be due to rate limiting. Try again in a few minutes or adjust your search parameters.`,
             },
           ],
         };

@@ -3,11 +3,11 @@ import randomUseragent from "random-useragent";
 import {
   LINKEDIN_HOST,
   BATCH_SIZE,
-  CACHE_TTL_MS,
   REQUEST_TIMEOUT_MS,
   MAX_CONSECUTIVE_ERRORS,
   BASE_DELAY_MS,
 } from "../constants.js";
+import { getCachedJobs, setCachedJobs } from "./job-cache.js";
 
 // --- Types ---
 
@@ -31,43 +31,23 @@ export interface JobListing {
   salary: string;
   jobUrl: string;
   agoTime: string;
+  source: "linkedin" | "himalayas";
+  // Himalayas-specific optional fields
+  companySlug?: string;
+  employmentType?: string;
+  minSalary?: number | null;
+  maxSalary?: number | null;
+  currency?: string;
+  seniority?: string;
+  categories?: string[];
+  locationRestrictions?: string[];
+  timezoneRestrictions?: string[];
+  applicationLink?: string;
+  guid?: string;
+  excerpt?: string;
+  expiryDate?: string;
+  description?: string;
 }
-
-// --- Cache ---
-
-interface CacheEntry<T> {
-  data: T;
-  timestamp: number;
-}
-
-class JobCache {
-  private cache = new Map<string, CacheEntry<JobListing[]>>();
-
-  set(key: string, value: JobListing[]): void {
-    this.cache.set(key, { data: value, timestamp: Date.now() });
-  }
-
-  get(key: string): JobListing[] | null {
-    const item = this.cache.get(key);
-    if (!item) return null;
-    if (Date.now() - item.timestamp > CACHE_TTL_MS) {
-      this.cache.delete(key);
-      return null;
-    }
-    return item.data;
-  }
-
-  clear(): void {
-    const now = Date.now();
-    for (const [key, value] of this.cache.entries()) {
-      if (now - value.timestamp > CACHE_TTL_MS) {
-        this.cache.delete(key);
-      }
-    }
-  }
-}
-
-const cache = new JobCache();
 
 // --- Filter mappings ---
 
@@ -177,7 +157,8 @@ function parseJobList(html: string): JobListing[] {
       date: el.find("time").attr("datetime") ?? "",
       salary: el.find(".job-search-card__salary-info").text().trim().replace(/\s+/g, " ") || "Not specified",
       jobUrl: el.find(".base-card__full-link").attr("href") ?? "",
-      agoTime: el.find(".job-search-card__listdate").text().trim()
+      agoTime: el.find(".job-search-card__listdate").text().trim(),
+      source: "linkedin",
     });
   });
 
@@ -232,7 +213,7 @@ function buildCacheKey(params: JobSearchParams): string {
 
 export async function fetchJobDescription(url: string): Promise<string> {
   const parsed = new URL(url);
-  if (parsed.hostname !== "www.linkedin.com" && parsed.hostname !== "linkedin.com") {
+  if (parsed.hostname !== LINKEDIN_HOST && parsed.hostname !== LINKEDIN_HOST.replace("www.", "")) {
     throw new Error("job_url must be a LinkedIn URL");
   }
   if (parsed.protocol !== "https:") {
@@ -277,9 +258,9 @@ export async function fetchJobDescription(url: string): Promise<string> {
 }
 
 export async function searchJobs(params: JobSearchParams): Promise<JobListing[]> {
-  const cacheKey = buildCacheKey(params);
+  const cacheKey = "linkedin:" + buildCacheKey(params);
 
-  const cached = cache.get(cacheKey);
+  const cached = getCachedJobs(cacheKey);
   if (cached) {
     console.error(`[linkedin] Cache hit for key: ${cacheKey}`);
     return cached;
@@ -316,7 +297,7 @@ export async function searchJobs(params: JobSearchParams): Promise<JobListing[]>
   }
 
   if (allJobs.length > 0) {
-    cache.set(cacheKey, allJobs);
+    setCachedJobs(cacheKey, allJobs);
   }
 
   return allJobs;
