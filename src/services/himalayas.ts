@@ -26,8 +26,8 @@ interface HimalayasJob {
   categories: string[];
   parentCategories: string[];
   description: string;
-  pubDate: string;
-  expiryDate: string;
+  pubDate: number;
+  expiryDate: number;
   applicationLink: string;
   guid: string;
 }
@@ -74,8 +74,8 @@ function formatSalary(job: HimalayasJob): string {
   return min || max;
 }
 
-function timeSince(dateStr: string): string {
-  const ms = Date.now() - new Date(dateStr).getTime();
+function timeSince(dateStr: number): string {
+  const ms = Date.now() - new Date(dateStr * 1000).getTime();
   const days = Math.floor(ms / (1000 * 60 * 60 * 24));
   if (days === 0) return "Today";
   if (days === 1) return "1 day ago";
@@ -100,7 +100,7 @@ function toJobListing(job: HimalayasJob): JobListing {
     position: job.title,
     company: job.companyName,
     location: locationParts,
-    date: job.pubDate ? new Date(job.pubDate).toISOString().split("T")[0] : "",
+    date: job.pubDate ? new Date(job.pubDate * 1000).toISOString().split("T")[0] : "",
     salary: formatSalary(job),
     jobUrl: buildJobUrl(job),
     agoTime: job.pubDate ? timeSince(job.pubDate) : "",
@@ -118,7 +118,7 @@ function toJobListing(job: HimalayasJob): JobListing {
     applicationLink: job.applicationLink,
     guid: job.guid,
     excerpt: job.excerpt,
-    expiryDate: job.expiryDate,
+    expiryDate: job.expiryDate ? new Date(job.expiryDate * 1000).toISOString().split("T")[0] : "",
     description: job.description,
   };
 }
