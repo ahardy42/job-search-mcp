@@ -60,11 +60,9 @@ function deduplicateJobs(jobs: JobListing[]): JobListing[] {
       // Prefer the listing with more data (salary info, description)
       const existingScore =
         (existing.salary !== "Not specified" ? 1 : 0) +
-        (existing.description ? 1 : 0) +
         (existing.minSalary != null ? 1 : 0);
       const newScore =
         (job.salary !== "Not specified" ? 1 : 0) +
-        (job.description ? 1 : 0) +
         (job.minSalary != null ? 1 : 0);
       if (newScore > existingScore) {
         seen.set(key, job);
@@ -102,11 +100,8 @@ Returns:
   - query: the search parameters used
   - jobs: array of job listings, each with:
     - position, company, location, date, salary, jobUrl, agoTime, source
-    - Himalayas results include additional fields: companySlug, employmentType,
-      minSalary, maxSalary, currency, seniority, categories, locationRestrictions,
-      timezoneRestrictions, applicationLink, guid, excerpt, expiryDate, description
-    - Note: the guid field often maps to the Himalayas job listing HTML page,
-      making it useful for scraping full job descriptions via job_description_search tool
+    - Himalayas results include additional fields: employmentType, minSalary,
+      maxSalary, currency, seniority, categories, locationRestrictions, applicationLink
 
 Notes:
   - Results are de-duplicated across sources by company + position

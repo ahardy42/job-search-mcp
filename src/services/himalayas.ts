@@ -106,7 +106,6 @@ function toJobListing(job: HimalayasJob): JobListing {
     agoTime: job.pubDate ? timeSince(job.pubDate) : "",
     source: "himalayas",
     // Himalayas-specific fields
-    companySlug: job.companySlug,
     employmentType: job.employmentType,
     minSalary: job.minSalary,
     maxSalary: job.maxSalary,
@@ -114,12 +113,7 @@ function toJobListing(job: HimalayasJob): JobListing {
     seniority: job.seniority,
     categories: job.categories,
     locationRestrictions: job.locationRestrictions,
-    timezoneRestrictions: job.timezoneRestrictions,
     applicationLink: job.applicationLink,
-    guid: job.guid,
-    excerpt: job.excerpt,
-    expiryDate: job.expiryDate ? new Date(job.expiryDate * 1000).toISOString().split("T")[0] : "",
-    description: job.description,
   };
 }
 

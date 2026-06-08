@@ -33,7 +33,6 @@ export interface JobListing {
   agoTime: string;
   source: "linkedin" | "himalayas";
   // Himalayas-specific optional fields
-  companySlug?: string;
   employmentType?: string;
   minSalary?: number | null;
   maxSalary?: number | null;
@@ -41,12 +40,7 @@ export interface JobListing {
   seniority?: string;
   categories?: string[];
   locationRestrictions?: string[];
-  timezoneRestrictions?: string[];
   applicationLink?: string;
-  guid?: string;
-  excerpt?: string;
-  expiryDate?: string;
-  description?: string;
 }
 
 // --- Filter mappings ---
