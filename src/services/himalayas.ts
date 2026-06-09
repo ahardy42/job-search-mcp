@@ -117,6 +117,28 @@ function toJobListing(job: HimalayasJob): JobListing {
   };
 }
 
+// --- Keyword filtering ---
+
+const STOP_WORDS = new Set([
+  "a", "an", "the", "and", "or", "for", "in", "at", "of", "to",
+  "with", "on", "by", "us", "job", "jobs",
+]);
+
+function extractTokens(keywords: string): string[] {
+  return keywords
+    .toLowerCase()
+    .split(/[\s,/|&]+/)
+    .map(t => t.replace(/[^a-z0-9#+.]/g, ""))
+    .filter(t => t.length >= 2 && !STOP_WORDS.has(t));
+}
+
+function jobMatchesKeywords(job: JobListing, tokens: string[]): boolean {
+  if (tokens.length === 0) return true;
+  const title = job.position.toLowerCase();
+  const cats = (job.categories ?? []).join(" ").toLowerCase();
+  return tokens.some(t => title.includes(t) || cats.includes(t));
+}
+
 // --- Search ---
 
 function buildCacheKey(params: JobSearchParams): string {
@@ -216,11 +238,14 @@ export async function searchJobs(params: JobSearchParams): Promise<JobListing[]>
     }
   }
 
-  if (allJobs.length > 0) {
-    setCachedJobs(cacheKey, allJobs);
+  const tokens = params.keywords ? extractTokens(params.keywords) : [];
+  const filtered = tokens.length > 0 ? allJobs.filter(j => jobMatchesKeywords(j, tokens)) : allJobs;
+
+  if (filtered.length > 0) {
+    setCachedJobs(cacheKey, filtered);
   }
 
-  return allJobs;
+  return filtered;
 }
 
 // --- Job description fetching ---
